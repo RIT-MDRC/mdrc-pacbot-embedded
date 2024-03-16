@@ -1077,6 +1077,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ca88d725a0a943b096803bd34e73a4437208b6077654cc4ecb2947a5f91618d"
 
 [[package]]
+name = "mdrc-pacbot-embedded"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "cortex-m",
+ "cortex-m-rt",
+ "cyw43",
+ "cyw43-pio",
+ "defmt",
+ "defmt-rtt",
+ "embassy-embedded-hal",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-net",
+ "embassy-rp",
+ "embassy-sync",
+ "embassy-time",
+ "embassy-usb",
+ "embassy-usb-logger",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "embedded-hal-bus",
+ "embedded-io-async",
+ "fixed",
+ "fixed-macro",
+ "futures",
+ "heapless 0.8.0",
+ "log",
+ "panic-probe",
+ "pid",
+ "pio",
+ "pio-proc",
+ "portable-atomic",
+ "rand",
+ "rotary-encoder-hal",
+ "serde",
+ "static_cell",
+ "usbd-hid 0.7.0",
+]
+
+[[package]]
 name = "memchr"
 version = "2.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1163,47 +1204,6 @@ name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
-
-[[package]]
-name = "pacbot-embassy-rp"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "cortex-m",
- "cortex-m-rt",
- "cyw43",
- "cyw43-pio",
- "defmt",
- "defmt-rtt",
- "embassy-embedded-hal",
- "embassy-executor",
- "embassy-futures",
- "embassy-net",
- "embassy-rp",
- "embassy-sync",
- "embassy-time",
- "embassy-usb",
- "embassy-usb-logger",
- "embedded-hal 1.0.0",
- "embedded-hal-async",
- "embedded-hal-bus",
- "embedded-io-async",
- "fixed",
- "fixed-macro",
- "futures",
- "heapless 0.8.0",
- "log",
- "panic-probe",
- "pid",
- "pio",
- "pio-proc",
- "portable-atomic",
- "rand",
- "rotary-encoder-hal",
- "serde",
- "static_cell",
- "usbd-hid 0.7.0",
-]
 
 [[package]]
 name = "panic-probe"

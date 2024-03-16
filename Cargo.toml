@@ -1,8 +1,7 @@
 [package]
 edition = "2021"
-name = "pacbot-embassy-rp"
+name = "mdrc-pacbot-embedded"
 version = "0.1.0"
-authors = ["MJE10 <63426573+MJE10@users.noreply.github.com>"]
 resolver = "2"
 #rust-version = "1.76"
 
