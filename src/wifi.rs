@@ -2,17 +2,21 @@ use crate::config::{WIFI_NETWORK, WIFI_PASSWORD};
 use crate::i2c_manager::NUM_DISTANCE_SENSORS;
 use crate::motors::NUM_MOTORS;
 use crate::{blink, Irqs, ENCODERS_CHANNEL, SENSORS_CHANNEL};
+use core::future::poll_fn;
+use core::task::Poll;
 use cyw43_pio::PioSpi;
-use defmt::{info, unwrap, Format};
+use defmt::{error, info, unwrap, Format};
 use embassy_executor::Spawner;
-use embassy_net::udp::{PacketMetadata, UdpSocket};
-use embassy_net::{Config, Ipv4Address, Ipv4Cidr, Stack, StackResources};
+use embassy_futures::select::{select, Either};
+use embassy_net::udp::{PacketMetadata, RecvError, UdpSocket};
+use embassy_net::{Config, IpEndpoint, Ipv4Address, Ipv4Cidr, Stack, StackResources};
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_24, PIN_25, PIN_29, PIO0};
 use embassy_rp::pio::Pio;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::Sender;
 use embassy_time::{Duration, Timer};
+use futures::TryFutureExt;
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
@@ -95,12 +99,12 @@ pub async fn wifi_setup(
 
     info!("Wifi startup complete");
 
-    // let config = Config::dhcpv4(Default::default());
-    let config = Config::ipv4_static(embassy_net::StaticConfigV4 {
-        address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 1, 212), 24),
-        dns_servers: Vec::new(),
-        gateway: None,
-    });
+    let config = Config::dhcpv4(Default::default());
+    // let config = Config::ipv4_static(embassy_net::StaticConfigV4 {
+    //     address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 1, 212), 24),
+    //     dns_servers: Vec::new(),
+    //     gateway: None,
+    // });
 
     // Generate random seed
     let seed = 0xab9a_dd1a_3b2b_715a; // chosen by fair dice roll
@@ -170,7 +174,7 @@ pub async fn wifi_setup(
     socket.bind(20002).unwrap();
 
     info!("Listening for UDP on port 20002...");
-    let mut msg_bytes = [0; 1000];
+    let mut msg_bytes = [0; 100];
 
     let mut msg = PacbotSensors {
         distance_sensors: [0; NUM_DISTANCE_SENSORS],
@@ -179,23 +183,60 @@ pub async fn wifi_setup(
         pid_output: [0.0; NUM_MOTORS],
     };
     let config = bincode::config::standard();
+    let motor_stop_command = PacbotCommand {
+        motors: [
+            MotorRequest::Velocity(0.0),
+            MotorRequest::Velocity(0.0),
+            MotorRequest::Velocity(0.0),
+        ],
+        pid: [5.0, 0.0, 0.0],
+        pid_limits: [1000.0, 1000.0, 1000.0],
+    };
     loop {
-        let (_n, ep) = socket.recv_from(&mut buf).await.unwrap();
-        if let Ok((command, _)) =
-            bincode::serde::decode_from_slice::<PacbotCommand, _>(&buf, config)
-        {
-            motor_sender.send(command).await;
+        match recv_from_with_timeout(&socket, &mut buf, Duration::from_secs(1)).await {
+            Some(Ok((_n, ep))) => {
+                if let Ok((command, _)) =
+                    bincode::serde::decode_from_slice::<PacbotCommand, _>(&buf, config)
+                {
+                    let _ = motor_sender.try_send(command);
+                }
+                while let Ok(new_sensors) = SENSORS_CHANNEL.try_receive() {
+                    msg.distance_sensors = new_sensors;
+                }
+                while let Ok((encoders, velocities, pid_output)) = ENCODERS_CHANNEL.try_receive() {
+                    msg.encoders = encoders;
+                    msg.encoder_velocities = velocities;
+                    msg.pid_output = pid_output;
+                    // info!("{:?}", msg.encoder_velocities);
+                }
+                let n = bincode::serde::encode_into_slice(&msg, &mut msg_bytes, config).unwrap();
+                socket.send_to(&msg_bytes[..n], ep).await.unwrap();
+            }
+            Some(Err(e)) => {
+                let _ = motor_sender.try_send(motor_stop_command.clone());
+                error!("Error when receiving! Setting motors to 0");
+            }
+            None => {
+                let _ = motor_sender.try_send(motor_stop_command.clone());
+                error!("Recv timeout! Setting motors to 0");
+            }
         }
-        while let Ok(new_sensors) = SENSORS_CHANNEL.try_receive() {
-            msg.distance_sensors = new_sensors;
-        }
-        while let Ok((encoders, velocities, pid_output)) = ENCODERS_CHANNEL.try_receive() {
-            msg.encoders = encoders;
-            msg.encoder_velocities = velocities;
-            msg.pid_output = pid_output;
-            // info!("{:?}", msg.encoder_velocities);
-        }
-        let n = bincode::serde::encode_into_slice(&msg, &mut msg_bytes, config).unwrap();
-        socket.send_to(&msg_bytes[..n], ep).await.unwrap();
+    }
+}
+
+async fn recv_from_with_timeout<'a>(
+    socket: &UdpSocket<'a>,
+    buf: &mut [u8],
+    timeout: Duration,
+) -> Option<Result<(usize, IpEndpoint), RecvError>> {
+    let timer = Timer::after(timeout);
+
+    let future = select(poll_fn(move |cx| socket.poll_recv_from(buf, cx)), timer).await;
+
+    // At this point, if the future resolved because of the timer, it means a timeout occurred.
+    // If it resolved because of poll_recv_from, then data was received before the timeout.
+    match future {
+        Either::First(x) => Some(x),
+        _ => None,
     }
 }

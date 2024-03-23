@@ -98,7 +98,7 @@ pub async fn run_i2c(
             }
         }
         if changed {
-            sender.send(old_range).await;
+            let _ = sender.try_send(old_range);
         }
         Timer::after_millis(1).await;
     }

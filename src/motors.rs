@@ -64,20 +64,20 @@ impl<'a> MotorIO<'a> {
     /// Get the current output on the given pin
     pub fn get_pin_pwm(&self, id: usize) -> u16 {
         if id % 2 == 0 {
-            self.motor_configs[id / NUM_MOTORS].compare_a
+            self.motor_configs[id / 2].compare_a
         } else {
-            self.motor_configs[id / NUM_MOTORS].compare_b
+            self.motor_configs[id / 2].compare_b
         }
     }
 
     /// Set the output value for a given pin
     pub fn set_pin_pwm(&mut self, id: usize, compare: u16) {
         if id % 2 == 0 {
-            self.motor_configs[id / NUM_MOTORS].compare_a = compare;
+            self.motor_configs[id / 2].compare_a = compare;
         } else {
-            self.motor_configs[id / NUM_MOTORS].compare_b = compare;
+            self.motor_configs[id / 2].compare_b = compare;
         }
-        self.set_pwm_config(id / NUM_MOTORS)
+        self.set_pwm_config(id / 2)
     }
 
     /// Get the current PWM outputs for the given motor
@@ -229,9 +229,14 @@ pub async fn run_motors(
                 };
             }
             // update estimated velocity
-            let dt = (motor_io.encoder_data[motor_id].last_tick
-                - motor_io.encoder_data[motor_id].last_last_tick)
-                .as_micros() as f32;
+            let dt = if let Some(dt) = motor_io.encoder_data[motor_id]
+                .last_tick
+                .checked_duration_since(motor_io.encoder_data[motor_id].last_last_tick)
+            {
+                dt.as_micros() as f32
+            } else {
+                10.0
+            };
             // if it has been too long since the last encoder tick, use the elapsed time to estimate velocity
             let time_since_last = motor_io.encoder_data[motor_id]
                 .last_tick
@@ -250,6 +255,9 @@ pub async fn run_motors(
 
             // update motor output
             match motor_requests[motor_id] {
+                MotorRequest::Velocity(0.0) => {
+                    motor_io.set_motor_speeds(motor_id, pwm_top, pwm_top);
+                }
                 MotorRequest::Velocity(_) => {
                     // update PID
                     let output = pids[motor_id]
