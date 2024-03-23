@@ -3,8 +3,10 @@ use crate::motors::NUM_MOTORS;
 use serde::{Deserialize, Serialize};
 
 /// Known Wi-Fi networks; will attempt to join each, in order
-pub const WIFI_NETWORK: &str = env!("WIFI_NETWORK");
-pub const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
+// pub const WIFI_NETWORK: &str = env!("WIFI_NETWORK");
+// pub const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
+pub const WIFI_NETWORK: &str = "testnetwork";
+pub const WIFI_PASSWORD: Option<&str> = None;
 
 /// Holds the order of the motor/encoder pins
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]

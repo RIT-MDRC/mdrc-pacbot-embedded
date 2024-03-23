@@ -99,12 +99,13 @@ pub async fn wifi_setup(
 
     info!("Wifi startup complete");
 
-    let config = Config::dhcpv4(Default::default());
-    // let config = Config::ipv4_static(embassy_net::StaticConfigV4 {
-    //     address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 1, 212), 24),
-    //     dns_servers: Vec::new(),
-    //     gateway: None,
-    // });
+    // let config = Config::dhcpv4(Default::default());
+    // TODO: hardcoded IP
+    let config = Config::ipv4_static(embassy_net::StaticConfigV4 {
+        address: embassy_net::Ipv4Cidr::new(embassy_net::Ipv4Address::new(192, 168, 4, 209), 24),
+        dns_servers: heapless::Vec::new(),
+        gateway: Some(embassy_net::Ipv4Address::new(192, 168, 4, 1)),
+    });
 
     // Generate random seed
     let seed = 0xab9a_dd1a_3b2b_715a; // chosen by fair dice roll
@@ -127,20 +128,23 @@ pub async fn wifi_setup(
 
     loop {
         // control.join_open("RIT-WiFi").await;
-        match control.join_open("testnetwork").await {
-            Ok(_) => break,
-            Err(err) => {
-                info!("join failed with status={}", err.status);
-                blink(&mut control, 3, Duration::from_millis(100)).await;
+        if let Some(password) = WIFI_PASSWORD {
+            match control.join_wpa2(WIFI_NETWORK, password).await {
+                Ok(_) => break,
+                Err(err) => {
+                    info!("join failed with status={}", err.status);
+                    blink(&mut control, 3, Duration::from_millis(100)).await;
+                }
+            }
+        } else {
+            match control.join_open(WIFI_NETWORK).await {
+                Ok(_) => break,
+                Err(err) => {
+                    info!("join failed with status={}", err.status);
+                    blink(&mut control, 3, Duration::from_millis(100)).await;
+                }
             }
         }
-        // match control.join_wpa2(WIFI_NETWORK, WIFI_PASSWORD).await {
-        //     Ok(_) => break,
-        //     Err(err) => {
-        //         info!("join failed with status={}", err.status);
-        //         // blink(&mut control, 3, Duration::from_millis(100)).await;
-        //     }
-        // }
     }
 
     info!("Joined network");
