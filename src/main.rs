@@ -13,7 +13,7 @@ mod wifi;
 use cyw43::Control;
 
 use crate::config::PacbotConfig;
-use crate::i2c_manager::{run_i2c, NUM_DISTANCE_SENSORS};
+use crate::i2c_manager::NUM_DISTANCE_SENSORS;
 use crate::motors::{run_motors, NUM_MOTORS};
 use crate::wifi::{wifi_setup, PacbotCommand};
 use defmt::*;

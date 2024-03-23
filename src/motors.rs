@@ -255,20 +255,22 @@ pub async fn run_motors(
 
             // update motor output
             match motor_requests[motor_id] {
-                MotorRequest::Velocity(0.0) => {
-                    motor_io.set_motor_speeds(motor_id, pwm_top, pwm_top);
-                }
-                MotorRequest::Velocity(_) => {
-                    // update PID
-                    let output = pids[motor_id]
-                        .next_control_output(motor_io.encoder_data[motor_id].velocity)
-                        .output;
-                    pid_output[motor_id] = output;
-                    // set pwm
-                    if output > 0.0 {
-                        motor_io.set_motor_speeds(motor_id, output as u16, 0);
+                MotorRequest::Velocity(v) => {
+                    // not great...
+                    if v == 0.0 {
+                        motor_io.set_motor_speeds(motor_id, pwm_top, pwm_top);
                     } else {
-                        motor_io.set_motor_speeds(motor_id, 0, -output as u16);
+                        // update PID
+                        let output = pids[motor_id]
+                            .next_control_output(motor_io.encoder_data[motor_id].velocity)
+                            .output;
+                        pid_output[motor_id] = output;
+                        // set pwm
+                        if output > 0.0 {
+                            motor_io.set_motor_speeds(motor_id, output as u16, 0);
+                        } else {
+                            motor_io.set_motor_speeds(motor_id, 0, -output as u16);
+                        }
                     }
                 }
                 MotorRequest::Pwm(a, b) => {

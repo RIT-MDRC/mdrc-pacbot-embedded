@@ -3,21 +3,18 @@ use crate::i2c_manager::NUM_DISTANCE_SENSORS;
 use crate::motors::NUM_MOTORS;
 use crate::{blink, Irqs, ENCODERS_CHANNEL, SENSORS_CHANNEL};
 use core::future::poll_fn;
-use core::task::Poll;
 use cyw43_pio::PioSpi;
 use defmt::{error, info, unwrap, Format};
 use embassy_executor::Spawner;
 use embassy_futures::select::{select, Either};
 use embassy_net::udp::{PacketMetadata, RecvError, UdpSocket};
-use embassy_net::{Config, IpEndpoint, Ipv4Address, Ipv4Cidr, Stack, StackResources};
+use embassy_net::{Config, IpEndpoint, Stack, StackResources};
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_24, PIN_25, PIN_29, PIO0};
 use embassy_rp::pio::Pio;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::Sender;
 use embassy_time::{Duration, Timer};
-use futures::TryFutureExt;
-use heapless::Vec;
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 
@@ -216,7 +213,7 @@ pub async fn wifi_setup(
                 let n = bincode::serde::encode_into_slice(&msg, &mut msg_bytes, config).unwrap();
                 socket.send_to(&msg_bytes[..n], ep).await.unwrap();
             }
-            Some(Err(e)) => {
+            Some(Err(_)) => {
                 let _ = motor_sender.try_send(motor_stop_command.clone());
                 error!("Error when receiving! Setting motors to 0");
             }
