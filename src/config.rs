@@ -21,11 +21,18 @@ impl Default for PacbotConfig {
     fn default() -> Self {
         Self {
             distance_sensors: [0, 1, 2, 3, 4, 5, 6, 7],
-            encoders: [(0, 1), (2, 3), (4, 5)],
-            motors: [(0, 1), (2, 3), (4, 5)],
+            encoders: [(0, 1), (3, 2), (4, 5)],
+            motors: [(0, 1), (3, 2), (4, 5)],
             static_ip: Some((192, 168, 1, 212)),
             udp_port: 20002,
         }
+        // Self {
+        //     distance_sensors: [0, 1, 2, 3, 4, 5, 6, 7],
+        //     encoders: [(0, 1), (2, 3), (4, 5)],
+        //     motors: [(0, 1), (2, 3), (4, 5)],
+        //     static_ip: Some((192, 168, 1, 212)),
+        //     udp_port: 20002,
+        // }
     }
 }
 

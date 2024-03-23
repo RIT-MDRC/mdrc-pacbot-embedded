@@ -74,24 +74,24 @@ async fn main(spawner: Spawner) {
         ))
         .expect("Failed in motor controller");
 
-    spawner
-        .spawn(run_i2c(
-            p.I2C0,
-            p.PIN_17,
-            p.PIN_16,
-            [
-                p.PIN_2.degrade(),
-                p.PIN_3.degrade(),
-                p.PIN_4.degrade(),
-                p.PIN_5.degrade(),
-                p.PIN_6.degrade(),
-                p.PIN_7.degrade(),
-                p.PIN_8.degrade(),
-                p.PIN_9.degrade(),
-            ],
-            SENSORS_CHANNEL.sender(),
-        ))
-        .expect("Failed in i2c task");
+    // spawner
+    //     .spawn(run_i2c(
+    //         p.I2C0,
+    //         p.PIN_17,
+    //         p.PIN_16,
+    //         [
+    //             p.PIN_2.degrade(),
+    //             p.PIN_3.degrade(),
+    //             p.PIN_4.degrade(),
+    //             p.PIN_5.degrade(),
+    //             p.PIN_6.degrade(),
+    //             p.PIN_7.degrade(),
+    //             p.PIN_8.degrade(),
+    //             p.PIN_9.degrade(),
+    //         ],
+    //         SENSORS_CHANNEL.sender(),
+    //     ))
+    //     .expect("Failed in i2c task");
 
     spawner
         .spawn(wifi_setup(

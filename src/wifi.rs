@@ -127,20 +127,20 @@ pub async fn wifi_setup(
 
     loop {
         // control.join_open("RIT-WiFi").await;
-        // match control.join_open("testnetwork").await {
-        //     Ok(_) => break,
-        //     Err(err) => {
-        //         info!("join failed with status={}", err.status);
-        //         blink(&mut control, 3, Duration::from_millis(100)).await;
-        //     }
-        // }
-        match control.join_wpa2(WIFI_NETWORK, WIFI_PASSWORD).await {
+        match control.join_open("testnetwork").await {
             Ok(_) => break,
             Err(err) => {
                 info!("join failed with status={}", err.status);
-                // blink(&mut control, 3, Duration::from_millis(100)).await;
+                blink(&mut control, 3, Duration::from_millis(100)).await;
             }
         }
+        // match control.join_wpa2(WIFI_NETWORK, WIFI_PASSWORD).await {
+        //     Ok(_) => break,
+        //     Err(err) => {
+        //         info!("join failed with status={}", err.status);
+        //         // blink(&mut control, 3, Duration::from_millis(100)).await;
+        //     }
+        // }
     }
 
     info!("Joined network");
