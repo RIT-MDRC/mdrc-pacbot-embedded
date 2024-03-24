@@ -13,7 +13,7 @@ mod wifi;
 use cyw43::Control;
 
 use crate::config::PacbotConfig;
-use crate::i2c_manager::NUM_DISTANCE_SENSORS;
+use crate::i2c_manager::{run_i2c, NUM_DISTANCE_SENSORS};
 use crate::motors::{run_motors, NUM_MOTORS};
 use crate::wifi::{wifi_setup, PacbotCommand};
 use defmt::*;
@@ -35,6 +35,7 @@ bind_interrupts!(struct Irqs {
 static SENSORS_CHANNEL: Channel<ThreadModeRawMutex, [u8; NUM_DISTANCE_SENSORS], 64> =
     Channel::new();
 
+#[allow(clippy::type_complexity)]
 static ENCODERS_CHANNEL: Channel<
     ThreadModeRawMutex,
     ([i64; NUM_MOTORS], [f32; NUM_MOTORS], [f32; NUM_MOTORS]),
@@ -58,44 +59,50 @@ async fn blink<'a>(control: &mut Control<'a>, count: usize, duration: Duration) 
 async fn main(spawner: Spawner) {
     info!("Hello World!");
 
+    let config = PacbotConfig::default();
+
     let p = embassy_rp::init(Default::default());
 
-    spawner
-        .spawn(run_motors(
-            PacbotConfig::default(),
-            (p.PIN_18, p.PIN_19, p.PIN_20, p.PIN_21, p.PIN_26, p.PIN_27),
-            (p.PWM_CH1, p.PWM_CH2, p.PWM_CH5),
-            [
-                (p.PIN_13.degrade(), p.PIN_12.degrade()),
-                (p.PIN_14.degrade(), p.PIN_15.degrade()),
-                (p.PIN_11.degrade(), p.PIN_10.degrade()),
-            ],
-            ENCODERS_CHANNEL.sender(),
-        ))
-        .expect("Failed in motor controller");
+    if config.motors_enabled {
+        spawner
+            .spawn(run_motors(
+                PacbotConfig::default(),
+                (p.PIN_18, p.PIN_19, p.PIN_20, p.PIN_21, p.PIN_26, p.PIN_27),
+                (p.PWM_CH1, p.PWM_CH2, p.PWM_CH5),
+                [
+                    (p.PIN_13.degrade(), p.PIN_12.degrade()),
+                    (p.PIN_14.degrade(), p.PIN_15.degrade()),
+                    (p.PIN_11.degrade(), p.PIN_10.degrade()),
+                ],
+                ENCODERS_CHANNEL.sender(),
+            ))
+            .expect("Failed in motor controller");
+    }
 
-    // spawner
-    //     .spawn(run_i2c(
-    //         p.I2C0,
-    //         p.PIN_17,
-    //         p.PIN_16,
-    //         [
-    //             p.PIN_2.degrade(),
-    //             p.PIN_3.degrade(),
-    //             p.PIN_4.degrade(),
-    //             p.PIN_5.degrade(),
-    //             p.PIN_6.degrade(),
-    //             p.PIN_7.degrade(),
-    //             p.PIN_8.degrade(),
-    //             p.PIN_9.degrade(),
-    //         ],
-    //         SENSORS_CHANNEL.sender(),
-    //     ))
-    //     .expect("Failed in i2c task");
+    if config.i2c_enabled {
+        spawner
+            .spawn(run_i2c(
+                p.I2C0,
+                p.PIN_17,
+                p.PIN_16,
+                [
+                    p.PIN_2.degrade(),
+                    p.PIN_3.degrade(),
+                    p.PIN_4.degrade(),
+                    p.PIN_5.degrade(),
+                    p.PIN_6.degrade(),
+                    p.PIN_7.degrade(),
+                    p.PIN_8.degrade(),
+                    p.PIN_9.degrade(),
+                ],
+                SENSORS_CHANNEL.sender(),
+            ))
+            .expect("Failed in i2c task");
+    }
 
     spawner
         .spawn(wifi_setup(
-            spawner.clone(),
+            spawner,
             p.PIN_23,
             p.PIN_25,
             p.PIO0,
@@ -103,6 +110,7 @@ async fn main(spawner: Spawner) {
             p.PIN_29,
             p.DMA_CH0,
             REQUESTED_VELOCITY_CHANNEL.sender(),
+            config,
         ))
         .expect("Failed in wifi setup task");
 }

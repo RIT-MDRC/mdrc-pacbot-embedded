@@ -63,11 +63,11 @@ pub async fn run_i2c(
                 // info!("{:?}", VL6180X::new(&mut i2c, 0x29).await);
                 if let Ok(mut sensor) = VL6180X::new(&mut i2c, 0x29).await {
                     // sensor.set_address(&mut i2c, addresses[i]).await;
-                    if let Ok(_) = sensor.set_address(&mut i2c, addresses[i]).await {
+                    if sensor.set_address(&mut i2c, addresses[i]).await.is_ok() {
                         Timer::after_millis(300).await;
                         if let Ok(sensor) = VL6180X::new(&mut i2c, addresses[i]).await {
                             Timer::after_millis(300).await;
-                            if let Ok(_) = sensor.start_range_continuous(&mut i2c, 1).await {
+                            if sensor.start_range_continuous(&mut i2c, 1).await.is_ok() {
                                 sensors[i] = Some(sensor)
                             } else {
                                 info!("start cont err");

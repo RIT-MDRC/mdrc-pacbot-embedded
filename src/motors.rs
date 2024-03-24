@@ -6,7 +6,8 @@ use embassy_rp::gpio::{AnyPin, Input, Pull};
 use embassy_rp::peripherals::{
     PIN_18, PIN_19, PIN_20, PIN_21, PIN_26, PIN_27, PWM_CH1, PWM_CH2, PWM_CH5,
 };
-use embassy_rp::pwm::{Config, Pwm};
+use embassy_rp::pwm;
+use embassy_rp::pwm::Pwm;
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::Sender;
 use embassy_time::{Instant, Timer};
@@ -34,13 +35,37 @@ struct EncoderData {
 struct MotorIO<'a> {
     config: PacbotConfig,
     motors: (Pwm<'a, PWM_CH1>, Pwm<'a, PWM_CH2>, Pwm<'a, PWM_CH5>),
-    motor_configs: [Config; NUM_MOTORS],
+    motor_configs: [pwm::Config; NUM_MOTORS],
     encoders: [Option<Rotary<Input<'a>, Input<'a>>>; NUM_MOTORS],
     encoder_data: [EncoderData; NUM_MOTORS],
 }
 
 #[allow(dead_code)]
 impl<'a> MotorIO<'a> {
+    /// Create a new MotorIO
+    fn new(
+        config: PacbotConfig,
+        motors: (Pwm<'a, PWM_CH1>, Pwm<'a, PWM_CH2>, Pwm<'a, PWM_CH5>),
+        motor_config: pwm::Config,
+        encoders: [Rotary<Input<'a>, Input<'a>>; NUM_MOTORS],
+    ) -> Self {
+        let mut s = Self {
+            config,
+            motors,
+            motor_configs: [motor_config.clone(), motor_config.clone(), motor_config],
+            encoders: encoders.map(Some),
+            encoder_data: [0, 1, 2].map(|x| EncoderData {
+                pins: (x * 2, x * 2 + 1),
+                ticks: 0,
+                last_tick: Instant::now(),
+                last_last_tick: Instant::now(),
+                velocity: 0.0,
+            }),
+        };
+        s.set_up_encoders();
+        s
+    }
+
     /// Applies changes to motor_configs to the pins
     fn set_pwm_config(&mut self, id: usize) {
         match id {
@@ -121,6 +146,7 @@ impl<'a> MotorIO<'a> {
     }
 }
 
+#[allow(clippy::type_complexity)]
 #[embassy_executor::task]
 pub async fn run_motors(
     config: PacbotConfig,
@@ -136,44 +162,25 @@ pub async fn run_motors(
 ) {
     info!("Motors task started");
 
+    let pwm_top: u16 = 0x8000;
+    let mut pwm_config = pwm::Config::default();
+    pwm_config.top = pwm_top;
+
     let motors = (
-        Pwm::new_output_ab(pwm.0, motor_pins.0, motor_pins.1, Config::default()),
-        Pwm::new_output_ab(pwm.1, motor_pins.2, motor_pins.3, Config::default()),
-        Pwm::new_output_ab(pwm.2, motor_pins.4, motor_pins.5, Config::default()),
+        Pwm::new_output_ab(pwm.0, motor_pins.0, motor_pins.1, pwm_config.clone()),
+        Pwm::new_output_ab(pwm.1, motor_pins.2, motor_pins.3, pwm_config.clone()),
+        Pwm::new_output_ab(pwm.2, motor_pins.4, motor_pins.5, pwm_config.clone()),
     );
 
-    let encoders = encoder_pins.map(|(a, b)| {
-        Some(Rotary::new(
-            Input::new(a, Pull::Down),
-            Input::new(b, Pull::Down),
-        ))
-    });
+    let encoders = encoder_pins
+        .map(|(a, b)| Rotary::new(Input::new(a, Pull::Down), Input::new(b, Pull::Down)));
 
-    let mut motor_io = MotorIO {
-        config,
-        motors,
-        motor_configs: [Config::default(), Config::default(), Config::default()],
-        encoders,
-        encoder_data: [EncoderData {
-            pins: (0, 1),
-            ticks: 0,
-            last_tick: Instant::now(),
-            last_last_tick: Instant::now(),
-            velocity: 0.0,
-        }; 3],
-    };
-    motor_io.encoder_data[1].pins = (2, 3);
-    motor_io.encoder_data[2].pins = (4, 5);
-    motor_io.set_up_encoders();
+    let mut motor_io = MotorIO::new(config, motors, pwm_config, encoders);
 
     // pid is tracking velocity in ticks/s, max 11 * 150 ticks /s
-    let pwm_top: u16 = 0x8000;
-    let mut pids = [Pid::new(0.0, pwm_top as f32); NUM_MOTORS];
-
-    for i in 0..NUM_MOTORS {
-        motor_io.set_pwm_top(pwm_top);
-        pids[i].p(3000.0, 1000.0);
-    }
+    let mut default_pid = Pid::new(0.0, pwm_top as f32);
+    default_pid.p(5.0, 1000.0);
+    let mut pids = [default_pid; NUM_MOTORS];
 
     let mut motor_requests = [MotorRequest::Pwm(pwm_top, pwm_top); NUM_MOTORS];
     let mut pid_output = [0.0; NUM_MOTORS];
@@ -183,8 +190,8 @@ pub async fn run_motors(
                 info!("New requested motor velocities: {:?}", command.motors);
                 motor_requests = command.motors;
             }
-            for i in 0..NUM_MOTORS {
-                if let MotorRequest::Velocity(v) = command.motors[i] {
+            for (i, motor_request) in command.motors.iter().enumerate() {
+                if let MotorRequest::Velocity(v) = motor_request {
                     // velocity in grid units/s, setpoint in encoder ticks/sec
                     // 1 gu = 88.9mm, so multiply by 88.9 to get mm/s
                     // wheel diameter is 38.1mm
@@ -192,7 +199,7 @@ pub async fn run_motors(
                     // so 1 tick = 0.7979mm
                     // so 1mm = 1.253 ticks
                     // so multiply by 1.253 to get ticks/s
-                    pids[i].setpoint(v * 88.9 * 1.253);
+                    pids[i].setpoint(*v * 88.9 * 1.253);
                     pids[i].p(command.pid[0], command.pid_limits[0]);
                     pids[i].i(command.pid[1], command.pid_limits[1]);
                     pids[i].d(command.pid[2], command.pid_limits[2]);
@@ -205,44 +212,41 @@ pub async fn run_motors(
             if let Some(ref mut e) = motor_io.encoders[motor_id] {
                 dir = e.update().unwrap()
             }
+            let encoder_data = &mut motor_io.encoder_data[motor_id];
             match dir {
                 Direction::Clockwise => {
-                    motor_io.encoder_data[motor_id].ticks += 1;
-                    motor_io.encoder_data[motor_id].last_last_tick =
-                        motor_io.encoder_data[motor_id].last_tick;
-                    motor_io.encoder_data[motor_id].last_tick = Instant::now();
+                    encoder_data.ticks += 1;
+                    encoder_data.last_last_tick = encoder_data.last_tick;
+                    encoder_data.last_tick = Instant::now();
                 }
                 Direction::CounterClockwise => {
-                    motor_io.encoder_data[motor_id].ticks -= 1;
-                    motor_io.encoder_data[motor_id].last_last_tick =
-                        motor_io.encoder_data[motor_id].last_tick;
-                    motor_io.encoder_data[motor_id].last_tick = Instant::now();
+                    encoder_data.ticks -= 1;
+                    encoder_data.last_last_tick = encoder_data.last_tick;
+                    encoder_data.last_tick = Instant::now();
                 }
                 Direction::None => {}
             }
             // If it didn't change, use the direction from before
             if dir == Direction::None {
-                dir = if motor_io.encoder_data[motor_id].velocity < 0.0 {
+                dir = if encoder_data.velocity < 0.0 {
                     Direction::CounterClockwise
                 } else {
                     Direction::Clockwise
                 };
             }
             // update estimated velocity
-            let dt = if let Some(dt) = motor_io.encoder_data[motor_id]
+            let dt = if let Some(dt) = encoder_data
                 .last_tick
-                .checked_duration_since(motor_io.encoder_data[motor_id].last_last_tick)
+                .checked_duration_since(encoder_data.last_last_tick)
             {
                 dt.as_micros() as f32
             } else {
+                // sometimes the instants are out of order
                 10.0
             };
             // if it has been too long since the last encoder tick, use the elapsed time to estimate velocity
-            let time_since_last = motor_io.encoder_data[motor_id]
-                .last_tick
-                .elapsed()
-                .as_micros() as f32;
-            motor_io.encoder_data[motor_id].velocity = if dt < time_since_last {
+            let time_since_last = encoder_data.last_tick.elapsed().as_micros() as f32;
+            encoder_data.velocity = if time_since_last > dt {
                 // what would the velocity be if it ticked now?
                 1_000_000.0 / time_since_last
             } else {
@@ -250,7 +254,7 @@ pub async fn run_motors(
                 1_000_000.0 / dt
             };
             if dir == Direction::CounterClockwise {
-                motor_io.encoder_data[motor_id].velocity *= -1.0;
+                encoder_data.velocity *= -1.0;
             }
 
             // update motor output

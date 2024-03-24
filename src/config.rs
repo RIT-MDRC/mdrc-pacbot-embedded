@@ -2,11 +2,12 @@ use crate::i2c_manager::NUM_DISTANCE_SENSORS;
 use crate::motors::NUM_MOTORS;
 use serde::{Deserialize, Serialize};
 
-/// Known Wi-Fi networks; will attempt to join each, in order
-// pub const WIFI_NETWORK: &str = env!("WIFI_NETWORK");
-// pub const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
-pub const WIFI_NETWORK: &str = "testnetwork";
-pub const WIFI_PASSWORD: Option<&str> = None;
+/// The Wi-Fi network that will be joined
+pub const WIFI_NETWORK: Option<&str> = option_env!("WIFI_NETWORK");
+/// The network that will be joined in $WIFI_NETWORK is not provided
+pub const DEFAULT_WIFI_NETWORK: &str = "testnetwork";
+/// The password that will be used to join the Wi-Fi
+pub const WIFI_PASSWORD: Option<&str> = option_env!("WIFI_PASSWORD");
 
 /// Holds the order of the motor/encoder pins
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -15,8 +16,12 @@ pub struct PacbotConfig {
     encoders: [(usize, usize); NUM_MOTORS],
     motors: [(usize, usize); NUM_MOTORS],
 
-    static_ip: Option<(u8, u8, u8, u8)>,
-    udp_port: usize,
+    /// If some, will attempt to request the (static ip) from the (gateway)
+    #[allow(clippy::type_complexity)]
+    pub static_ip: Option<((u8, u8, u8, u8), (u8, u8, u8, u8))>,
+    pub udp_port: usize,
+    pub i2c_enabled: bool,
+    pub motors_enabled: bool,
 }
 
 impl Default for PacbotConfig {
@@ -25,8 +30,10 @@ impl Default for PacbotConfig {
             distance_sensors: [0, 1, 2, 3, 4, 5, 6, 7],
             encoders: [(0, 1), (3, 2), (4, 5)],
             motors: [(0, 1), (3, 2), (4, 5)],
-            static_ip: Some((192, 168, 1, 212)),
+            static_ip: Some(((192, 168, 4, 209), (192, 168, 4, 1))),
             udp_port: 20002,
+            i2c_enabled: false,
+            motors_enabled: true,
         }
         // Self {
         //     distance_sensors: [0, 1, 2, 3, 4, 5, 6, 7],
@@ -169,16 +176,6 @@ impl PacbotConfig {
                 break;
             }
         }
-    }
-
-    /// If not None, the pico will try to request this static IP
-    pub fn static_ip_mut(&mut self) -> &mut Option<(u8, u8, u8, u8)> {
-        &mut self.static_ip
-    }
-
-    /// The port where the pico will listen for UDP messages
-    pub fn udp_port_mut(&mut self) -> &mut usize {
-        &mut self.udp_port
     }
 }
 
