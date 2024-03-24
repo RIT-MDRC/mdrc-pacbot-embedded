@@ -25,6 +25,8 @@ use embassy_rp::{bind_interrupts, i2c};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
+
+#[allow(unused_imports)]
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
